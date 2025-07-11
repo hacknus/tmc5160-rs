@@ -164,7 +164,8 @@ where
     }
 
     fn accel_from_hz_per_s(&mut self, accel_hz_per_s: f32) -> u32 {
-        ((accel_hz_per_s * 16_777_216.0 * self.step_count) / (self._clock * self._clock)) as u32
+        let accel_microsteps = accel_hz_per_s * self.step_count;
+        ((accel_microsteps * 16_777_216.0 * 512.0 * 256.0) / (self._clock * self._clock)) as u32
     }
 
     /// read a specified register
