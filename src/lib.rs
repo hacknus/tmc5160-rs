@@ -73,7 +73,8 @@ pub struct Tmc5160<SPI, CS, EN> {
     /// debug info of the last transmission
     pub debug: [u8; 5],
     _clock: f32,
-    _step_count: f32,
+    /// microstepping step count
+    pub step_count: f32,
     _en_inverted: bool,
     /// value of the GCONF register
     pub g_conf: GConf,
@@ -117,7 +118,7 @@ where
             status: SpiStatus::new(),
             debug: [0; 5],
             _clock: 12000000.0,
-            _step_count: 256.0,
+            step_count: 256.0,
             _en_inverted: false,
             g_conf: GConf::new(),
             node_conf: NodeConf::new(),
@@ -154,16 +155,16 @@ where
 
     /// specify step count of the motor (Default is 256)
     pub fn step_count(mut self, step_count: f32) -> Self {
-        self._step_count = step_count;
+        self.step_count = step_count;
         self
     }
 
     fn speed_from_hz(&mut self, speed_hz: f32) -> u32 {
-        (speed_hz / (self._clock / 16_777_216.0) * self._step_count) as u32
+        (speed_hz / (self._clock / 16_777_216.0) * self.step_count) as u32
     }
 
-    fn accel_from_hz(&mut self, accel_hz_per_s: f32) -> u32 {
-        (accel_hz_per_s / (self._clock * self._clock) * 16_777_216.0 * self._step_count) as u32
+    fn accel_from_hz_per_s(&mut self, accel_hz_per_s: f32) -> u32 {
+        (accel_hz_per_s / (self._clock * self._clock) * 16_777_216.0 * self.step_count) as u32
     }
 
     /// read a specified register
@@ -357,6 +358,36 @@ where
     /// write value to CHOP_CONF register
     pub fn update_chop_conf(&mut self) -> Result<DataPacket, Error<E>> {
         let mut value = swap_bytes(self.chop_conf.into_bytes());
+        match self.chop_conf.mres() {
+            0b0000 => {
+                self.step_count = 256.0;
+            }
+            0b0001 => {
+                self.step_count = 128.0;
+            }
+            0b0010 => {
+                self.step_count = 64.0;
+            }
+            0b0011 => {
+                self.step_count = 32.0;
+            }
+            0b0100 => {
+                self.step_count = 16.0;
+            }
+            0b0101 => {
+                self.step_count = 8.0;
+            }
+            0b0110 => {
+                self.step_count = 4.0;
+            }
+            0b0111 => {
+                self.step_count = 2.0;
+            }
+            0b1000 => {
+                self.step_count = 1.0;
+            }
+            _ => {}
+        }
         self.write_register(Registers::CHOPCONF, &mut value)
     }
 
@@ -577,7 +608,7 @@ where
 
     /// set the max velocity (VMAX)
     pub fn set_velocity_raw(&mut self, velocity: u32) -> Result<DataPacket, Error<E>> {
-        self.v_max = velocity as f32 / self._step_count * (self._clock / 16_777_216.0);
+        self.v_max = velocity as f32 / self.step_count * (self._clock / 16_777_216.0);
         let mut val = velocity.to_be_bytes();
         let packet = self.write_register(Registers::VMAX, &mut val)?;
         self.status = packet.status;
@@ -586,7 +617,7 @@ where
 
     /// set the max acceleration (AMAX, DMAX, A1, D1)
     pub fn set_acceleration(&mut self, acceleration: f32) -> Result<DataPacket, Error<E>> {
-        let a_max = self.accel_from_hz(acceleration);
+        let a_max = self.accel_from_hz_per_s(acceleration);
         let mut val = a_max.to_be_bytes();
         self.write_register(Registers::AMAX, &mut val)?;
         self.write_register(Registers::DMAX, &mut val)?;
@@ -599,7 +630,7 @@ where
     /// move to a specific location
     pub fn move_to(&mut self, target: f32) -> Result<DataPacket, Error<E>> {
         self.enable()?;
-        let target = (target * self._step_count) as i32;
+        let target = (target * self.step_count) as i32;
         let mut val = target.to_be_bytes();
         let packet = self.write_register(Registers::XTARGET, &mut val)?;
         self.status = packet.status;
@@ -609,19 +640,19 @@ where
     /// get the latched position
     pub fn get_latched_position(&mut self) -> Result<f32, Error<E>> {
         self.read_register(Registers::XLATCH)
-            .map(|val| (val.data as i32) as f32 / self._step_count)
+            .map(|val| (val.data as i32) as f32 / self.step_count)
     }
 
     /// get the current position
     pub fn get_position(&mut self) -> Result<f32, Error<E>> {
         self.read_register(Registers::XACTUAL)
-            .map(|val| (val.data as i32) as f32 / self._step_count)
+            .map(|val| (val.data as i32) as f32 / self.step_count)
     }
 
     /// set the current position
     pub fn set_position(&mut self, target_signed: i32) -> Result<DataPacket, Error<E>> {
         let target = target_signed;
-        let mut val = (target * self._step_count as i32).to_be_bytes();
+        let mut val = (target * self.step_count as i32).to_be_bytes();
         self.write_register(Registers::XACTUAL, &mut val)
     }
 
@@ -630,10 +661,10 @@ where
         self.read_register(Registers::VACTUAL).map(|val| {
             if (val.data & 0b100000000000000000000000) == 0b100000000000000000000000 {
                 -((8388607 - (val.data & 0b11111111111111111111111) as i32) as f64
-                    / self._step_count as f64
+                    / self.step_count as f64
                     * (self._clock as f64 / 16_777_216.0)) as f32
             } else {
-                ((val.data as i32) as f64 / self._step_count as f64
+                ((val.data as i32) as f64 / self.step_count as f64
                     * (self._clock as f64 / 16_777_216.0)) as f32
             }
         })
@@ -647,6 +678,6 @@ where
     /// get the current target position (XTARGET)
     pub fn get_target(&mut self) -> Result<f32, Error<E>> {
         self.read_register(Registers::XTARGET)
-            .map(|val| (val.data as i32) as f32 / self._step_count)
+            .map(|val| (val.data as i32) as f32 / self.step_count)
     }
 }
