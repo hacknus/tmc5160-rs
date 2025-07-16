@@ -504,10 +504,10 @@ pub struct CoolConf {
     #[skip] _c: B1,
     pub sedn: B2,
     pub seimin: bool,
-    pub sgt: B6,
+    pub sgt: B7,
     #[skip] _d: B1,
     pub sfilt: bool,
-    #[skip] _e: B8,
+    #[skip] _e: B7,
 }
 
 /// PWMCONF Register
