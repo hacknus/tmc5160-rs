@@ -541,6 +541,13 @@ where
         Ok(RampStat::from_bytes(packet.data.to_le_bytes()))
     }
 
+    /// read IoIn register
+    pub fn read_ioin(&mut self) -> Result<IoIn, Error<E>> {
+        let packet = self.read_register(Registers::IOIN)?;
+        self.status = packet.status;
+        Ok(IoIn::from_bytes(packet.data.to_le_bytes()))
+    }
+
     /// read ENC_STATUS register
     pub fn read_enc_status(&mut self) -> Result<EncStatus, Error<E>> {
         let packet = self.read_register(Registers::ENC_STATUS)?;
