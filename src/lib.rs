@@ -332,6 +332,12 @@ impl<SPI, CS, EN, E> Tmc5160<SPI, CS, EN>
     }
 
     /// write value to SW_MODE register
+    pub fn write_ramp_stat(&mut self, ramp_stat: RampStat) -> Result<DataPacket, Error<E>> {
+        let mut value = swap_bytes(ramp_stat.into_bytes());
+        self.write_register(Registers::RAMP_STAT, &mut value)
+    }
+    
+    /// write value to SW_MODE register
     pub fn update_sw_mode(&mut self) -> Result<DataPacket, Error<E>> {
         let mut value = swap_bytes(self.sw_mode.into_bytes());
         self.write_register(Registers::SW_MODE, &mut value)
